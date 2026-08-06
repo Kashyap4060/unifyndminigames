@@ -48,6 +48,12 @@ files change:
 A game with no registered engine **fails closed** (409) rather than guessing. `russian_roulette`
 is the reference implementation.
 
+**Implemented engines (11):** `russian_roulette`, `crash`, `hi_lo` (multi-step);
+`coin_flip`, `dice_tower`, `shell_game`, `vault`, `derby`, `penalty_shootout`, `plinko` (single-step);
+`minesweeper` (multi-step). These are `microgames.md` Part A games #1–8, #11, #12, #15. Each has a
+pure unit-test suite in `test/engines/`. Remaining Part A (#9, #10, #13, #14) and all Part B
+skill games (#16–30, which use a separate score-submission model) are not yet built.
+
 ## Setup
 
 ```bash

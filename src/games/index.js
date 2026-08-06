@@ -17,6 +17,11 @@ const DiceTowerEngine = require('../engines/diceTower');
 const ShellGameEngine = require('../engines/shellGame');
 const HiLoEngine = require('../engines/hiLo');
 const CrashEngine = require('../engines/crash');
+const VaultEngine = require('../engines/vault');
+const DerbyEngine = require('../engines/derby');
+const PenaltyShootoutEngine = require('../engines/penaltyShootout');
+const PlinkoEngine = require('../engines/plinko');
+const MinesweeperEngine = require('../engines/minesweeper');
 
 registerEngine(new RussianRouletteEngine());
 registerEngine(new CoinFlipEngine());
@@ -24,6 +29,11 @@ registerEngine(new DiceTowerEngine());
 registerEngine(new ShellGameEngine());
 registerEngine(new HiLoEngine());
 registerEngine(new CrashEngine());
+registerEngine(new VaultEngine());
+registerEngine(new DerbyEngine());
+registerEngine(new PenaltyShootoutEngine());
+registerEngine(new PlinkoEngine());
+registerEngine(new MinesweeperEngine());
 
 // registerEngine(new BlackjackEngine());
 // registerEngine(new SpinWheelEngine());
