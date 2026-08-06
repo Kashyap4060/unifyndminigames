@@ -40,6 +40,44 @@ function weekStartUtc(date) {
   return d;
 }
 
+/** UTC midnight of the given date. */
+function utcMidnight(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function addUtcDays(date, days) {
+  const d = new Date(date.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+/** 'YYYY-MM-DD 00:00:00' (UTC) — a MySQL DATETIME boundary. */
+function toUtcDateTimeString(date) {
+  return `${toUtcDateString(date)} 00:00:00`;
+}
+
+/**
+ * The [start, end) UTC datetime window for a period, used to sum ledger credits
+ * during reconciliation. Returns null for 'global' (all-time, no time filter).
+ * @returns {{start:string, end:string}|null}
+ */
+function periodTimeRange(periodType, date) {
+  switch (periodType) {
+    case PERIOD_TYPES.GLOBAL:
+      return null;
+    case PERIOD_TYPES.DAILY: {
+      const start = utcMidnight(date);
+      return { start: toUtcDateTimeString(start), end: toUtcDateTimeString(addUtcDays(start, 1)) };
+    }
+    case PERIOD_TYPES.WEEKLY: {
+      const start = weekStartUtc(date);
+      return { start: toUtcDateTimeString(start), end: toUtcDateTimeString(addUtcDays(start, 7)) };
+    }
+    default:
+      throw new Error(`Unknown period type: ${periodType}`);
+  }
+}
+
 function isValidPeriodType(periodType) {
   return ALL_PERIOD_TYPES.includes(periodType);
 }
@@ -100,6 +138,7 @@ module.exports = {
   ALL_PERIOD_TYPES,
   toUtcDateString,
   weekStartUtc,
+  periodTimeRange,
   isValidPeriodType,
   periodKeyValue,
   redisKey,

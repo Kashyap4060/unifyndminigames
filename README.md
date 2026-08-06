@@ -239,7 +239,8 @@ src/redis/client.js                      Resilient ioredis client (fail-fast →
 | `getTopPlayers(period, {limit=100})` | `ZREVRANGE … WITHSCORES` | `SELECT … ORDER BY score DESC LIMIT n` |
 | `getPlayerRank(userId, period)` | `ZREVRANK` (+1) | count-of-higher query |
 | `getPlayerScore(userId, period)` | `ZSCORE` | `SELECT score` |
-| `rebuildFromDatabase(period)` | rehydrate via temp key + atomic `RENAME` | reads MySQL |
+| `rebuildFromDatabase(period)` | rehydrate via temp key + atomic `RENAME` | reads `leaderboard_scores` |
+| `reconcileFromLedger(period)` | refreshes Redis after repair | rebuilds `leaderboard_scores` by summing `points_ledger` `GAME_PAYOUT` credits |
 
 `period` ∈ `global` | `daily` | `weekly`. `getTopPlayers` returns `{ source: 'redis'|'mysql', entries: [{userId, score, rank}] }`.
 
@@ -251,6 +252,10 @@ src/redis/client.js                      Resilient ioredis client (fail-fast →
   Redis **fails fast** to the fallback instead of hanging. It reconnects in the background and
   self-heals; call `rebuildFromDatabase()` after an outage to re-warm from MySQL.
 - Set `REDIS_ENABLED=false` to run MySQL-only (still fully functional).
+- **Durability/repair**: the per-settlement increment is best-effort, so `leaderboard_scores`
+  could drift if an increment is lost. `reconcileFromLedger(period)` repairs it from the money
+  source of truth — summing `points_ledger` `GAME_PAYOUT` credits per user over the period's UTC
+  window — then refreshes Redis. Run it on a schedule and/or after an outage.
 
 ### `GET /api/leaderboard`
 
@@ -261,10 +266,15 @@ default 100). Returns the top players plus the caller's own standing:
 curl -s "http://localhost:3000/api/leaderboard?period=daily&limit=100" \
   -H "Authorization: Bearer $TOKEN"
 # { success:true, data:{ period, source:'redis'|'mysql',
-#   entries:[{userId,score,rank}...], me:{ user_id, rank, score } } }
+#   entries:[{ rank, score, alias, isYou }...],
+#   me:{ alias, rank, score } } }
 ```
 
 `source` tells you whether the response came from Redis or the MySQL fallback.
+
+**Privacy:** the public list never exposes raw `user_id`. Each entry carries a stable **opaque
+alias** (`p_…`, an HMAC of the user id under `LEADERBOARD_ALIAS_SECRET`) — non-reversible and
+non-enumerable — plus an `isYou` flag so the caller can find their own row.
 
 ### Auto-populated from settlement
 

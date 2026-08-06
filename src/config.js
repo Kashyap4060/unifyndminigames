@@ -64,6 +64,11 @@ const config = Object.freeze({
       weekly: intWithDefault('LEADERBOARD_WEEKLY_TTL', 777600), // 9 days
     }),
   }),
+  leaderboard: Object.freeze({
+    // Secret for deriving opaque public player aliases (never exposed to clients).
+    // Falls back to JWT_SECRET when not set separately.
+    aliasSecret: process.env.LEADERBOARD_ALIAS_SECRET || required('JWT_SECRET'),
+  }),
 });
 
 module.exports = config;

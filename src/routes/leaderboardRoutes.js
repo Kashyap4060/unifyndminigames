@@ -1,10 +1,12 @@
 'use strict';
 
 const express = require('express');
+const config = require('../config');
 const authenticate = require('../middleware/auth');
 const { leaderboardRateLimiter } = require('../middleware/rateLimit');
 const { validateLeaderboardQuery } = require('../validators/leaderboardQuery');
 const { leaderboardService } = require('../leaderboard');
+const { aliasForUser } = require('../leaderboard/alias');
 
 const router = express.Router();
 
@@ -31,13 +33,24 @@ router.get(
       leaderboardService.getPlayerScore(userId, period),
     ]);
 
+    const secret = config.leaderboard.aliasSecret;
+    // Public entries expose an opaque, stable alias instead of the raw user_id —
+    // no PK enumeration, no identity↔winnings linkage. `isYou` lets the caller
+    // spot their own row without us echoing anyone's real id.
+    const publicEntries = entries.map((e) => ({
+      rank: e.rank,
+      score: e.score,
+      alias: aliasForUser(e.userId, secret),
+      isYou: String(e.userId) === String(userId),
+    }));
+
     return res.status(200).json({
       success: true,
       data: {
         period,
         source, // 'redis' | 'mysql' — surfaces degraded mode
-        entries,
-        me: { user_id: String(userId), rank, score },
+        entries: publicEntries,
+        me: { alias: aliasForUser(userId, secret), rank, score },
       },
     });
   }),

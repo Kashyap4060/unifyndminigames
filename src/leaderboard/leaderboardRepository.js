@@ -63,6 +63,57 @@ class LeaderboardRepository {
     return rows.length ? Number(rows[0].rnk) : null;
   }
 
+  /**
+   * Repair a period's leaderboard_scores from the money source of truth: sum the
+   * GAME_PAYOUT credits in points_ledger per user for the period's UTC window and
+   * upsert the authoritative totals. Fixes any drift from a lost/failed increment.
+   *
+   * @param {string} periodType
+   * @param {string} periodKey
+   * @param {{start:string, end:string}|null} timeRange  null = all-time (global).
+   * @returns {Promise<number>} number of users reconciled.
+   */
+  async reconcilePeriodFromLedger(periodType, periodKey, timeRange) {
+    const conn = await this.pool.getConnection();
+    try {
+      // Interpret ledger timestamps in UTC to match the UTC-derived period window.
+      await conn.query("SET time_zone = '+00:00'");
+
+      let sql =
+        `SELECT user_id, SUM(amount) AS total
+           FROM points_ledger
+          WHERE reason = 'GAME_PAYOUT' AND entry_type = 'CREDIT'`;
+      const params = [];
+      if (timeRange) {
+        sql += ' AND created_at >= ? AND created_at < ?';
+        params.push(timeRange.start, timeRange.end);
+      }
+      sql += ' GROUP BY user_id';
+
+      const [rows] = await conn.execute(sql, params);
+      if (rows.length === 0) return 0;
+
+      await conn.beginTransaction();
+      try {
+        for (const r of rows) {
+          await conn.execute(
+            `INSERT INTO leaderboard_scores (period_type, period_key, user_id, score)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE score = VALUES(score)`,
+            [periodType, periodKey, r.user_id, String(r.total)],
+          );
+        }
+        await conn.commit();
+      } catch (err) {
+        await conn.rollback();
+        throw err;
+      }
+      return rows.length;
+    } finally {
+      conn.release();
+    }
+  }
+
   /** A user's score, or null if not on the board. */
   async getScore(periodType, periodKey, userId) {
     const [rows] = await this.pool.execute(

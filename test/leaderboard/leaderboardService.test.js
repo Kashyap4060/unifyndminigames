@@ -56,7 +56,14 @@ function makeFakeRedis({ status = 'ready' } = {}) {
 }
 
 function makeFakeRepo(overrides = {}) {
-  const calls = { upsertScore: [], incrementScore: [], getTop: [], getRank: [], getScore: [] };
+  const calls = {
+    upsertScore: [],
+    incrementScore: [],
+    getTop: [],
+    getRank: [],
+    getScore: [],
+    reconcilePeriodFromLedger: [],
+  };
   return {
     calls,
     upsertScore: async (...a) => {
@@ -76,6 +83,10 @@ function makeFakeRepo(overrides = {}) {
     getScore: async (...a) => {
       calls.getScore.push(a);
       return overrides.getScore ?? null;
+    },
+    reconcilePeriodFromLedger: async (...a) => {
+      calls.reconcilePeriodFromLedger.push(a);
+      return overrides.reconcileCount ?? 0;
     },
   };
 }
@@ -202,6 +213,41 @@ describe('LeaderboardService — reads serve from Redis, fall back to MySQL', ()
 
     svc = makeService(makeFakeRedis({ status: 'end' }), makeFakeRepo({ getScore: 12 }));
     assert.equal(await svc.getPlayerScore(42, 'daily', { now: NOW }), 12);
+  });
+});
+
+describe('LeaderboardService — reconcileFromLedger repairs from the ledger, then refreshes Redis', () => {
+  it('reconciles the correct period window and rebuilds the Redis cache', async () => {
+    const redis = makeFakeRedis();
+    const repo = makeFakeRepo({ reconcileCount: 3, getTop: [{ user_id: '5', score: 900 }] });
+    const svc = makeService(redis, repo);
+
+    const count = await svc.reconcileFromLedger('daily', { now: NOW });
+
+    assert.equal(count, 3);
+    // Reconciled the daily period with its UTC [start, end) window from the ledger.
+    assert.deepEqual(repo.calls.reconcilePeriodFromLedger[0], [
+      'daily',
+      '2026-08-05',
+      { start: '2026-08-05 00:00:00', end: '2026-08-06 00:00:00' },
+    ]);
+    // Then rehydrated Redis from the now-authoritative MySQL table, via a temp
+    // key that is atomically RENAMEd over the live key.
+    assert.equal(repo.calls.getTop.length, 1);
+    const zadds = redis.pipelineCalls.filter((c) => c[0] === 'zadd');
+    assert.equal(zadds.length, 1);
+    const tempKey = zadds[0][1];
+    assert.match(tempKey, /^leaderboard:daily:2026-08-05:rebuild:/);
+    assert.deepEqual(zadds[0].slice(2), [900, '5']); // score, member
+    const renames = redis.pipelineCalls.filter((c) => c[0] === 'rename');
+    assert.deepEqual(renames[0], ['rename', tempKey, 'leaderboard:daily:2026-08-05']);
+  });
+
+  it('uses an all-time window (null range) for the global period', async () => {
+    const repo = makeFakeRepo({ reconcileCount: 1, getTop: [] });
+    const svc = makeService(makeFakeRedis(), repo);
+    await svc.reconcileFromLedger('global', { now: NOW });
+    assert.deepEqual(repo.calls.reconcilePeriodFromLedger[0], ['global', 'global', null]);
   });
 });
 

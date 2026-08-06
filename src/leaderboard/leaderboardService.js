@@ -5,6 +5,7 @@ const {
   isValidPeriodType,
   redisKey,
   periodKeyValue,
+  periodTimeRange,
   periodsFor,
   parseEntries,
 } = require('./keys');
@@ -176,6 +177,22 @@ class LeaderboardService {
       }
       return 0;
     }
+  }
+
+  /**
+   * Repair a period from the money source of truth (points_ledger GAME_PAYOUT
+   * credits), then refresh Redis. Run on a schedule and/or after a Redis or
+   * increment failure to correct any leaderboard drift — the ledger, not the
+   * cache, is authoritative. Returns the number of users reconciled.
+   */
+  async reconcileFromLedger(periodType = PERIOD_TYPES.GLOBAL, { now = new Date() } = {}) {
+    assertPeriodType(periodType);
+    const periodKey = periodKeyValue(periodType, now);
+    const timeRange = periodTimeRange(periodType, now);
+    const count = await this.repository.reconcilePeriodFromLedger(periodType, periodKey, timeRange);
+    // Refresh the cache from the now-authoritative leaderboard_scores.
+    await this.rebuildFromDatabase(periodType, { now });
+    return count;
   }
 
   /**

@@ -7,6 +7,7 @@ const {
   PERIOD_TYPES,
   toUtcDateString,
   weekStartUtc,
+  periodTimeRange,
   isValidPeriodType,
   periodKeyValue,
   redisKey,
@@ -57,6 +58,18 @@ describe('leaderboard keys', () => {
   it('validates period types', () => {
     assert.equal(isValidPeriodType('daily'), true);
     assert.equal(isValidPeriodType('monthly'), false);
+  });
+
+  it('computes UTC [start, end) windows per period (for ledger reconciliation)', () => {
+    assert.equal(periodTimeRange(PERIOD_TYPES.GLOBAL, WED), null);
+    assert.deepEqual(periodTimeRange(PERIOD_TYPES.DAILY, WED), {
+      start: '2026-08-05 00:00:00',
+      end: '2026-08-06 00:00:00',
+    });
+    assert.deepEqual(periodTimeRange(PERIOD_TYPES.WEEKLY, WED), {
+      start: '2026-08-03 00:00:00',
+      end: '2026-08-10 00:00:00',
+    });
   });
 
   it('parses ZREVRANGE WITHSCORES flat arrays into ranked entries', () => {
