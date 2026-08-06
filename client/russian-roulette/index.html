@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+  />
+  <meta name="theme-color" content="#0B0C10" />
+  <title>CHAMBER · Neo-Noir Cyber-Arcade</title>
+
+  <!-- Distinctive display + UI typefaces (graceful system fallback if offline) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Tailwind (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Neo-Noir Cyber-Arcade design tokens.
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            midnight: '#0B0C10',
+            charcoal: '#1F2833',
+            neon: '#45A29E',
+            aqua: '#66FCF1',
+            platinum: '#FFFFFF',
+            titanium: '#C5C6C7',
+            danger: '#FF4D5E', // semantic-only (the loaded chamber / elimination)
+          },
+          fontFamily: {
+            display: ['Orbitron', 'ui-monospace', 'monospace'],
+            body: ['Rajdhani', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          },
+          boxShadow: {
+            neon: '0 0 10px #66FCF1',
+            'neon-sm': '0 0 8px rgba(102,252,241,0.45)',
+            'neon-md': '0 0 16px rgba(102,252,241,0.55), inset 0 0 10px rgba(69,162,158,0.25)',
+            'neon-lg': '0 0 26px rgba(102,252,241,0.65), 0 0 60px rgba(69,162,158,0.35)',
+            danger: '0 0 18px rgba(255,77,94,0.7), 0 0 44px rgba(255,77,94,0.35)',
+            panel: 'inset 0 1px 0 rgba(102,252,241,0.10), 0 14px 34px rgba(0,0,0,0.65)',
+          },
+          letterSpacing: { arcade: '0.34em' },
+          animation: {
+            'pulse-glow': 'pulseGlow 2.6s ease-in-out infinite',
+            float: 'float 6s ease-in-out infinite',
+          },
+          keyframes: {
+            pulseGlow: { '0%,100%': { opacity: '0.5' }, '50%': { opacity: '1' } },
+            float: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-4px)' } },
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    :root { color-scheme: dark; }
+    * { -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; background: #0B0C10; }
+    body {
+      font-family: 'Rajdhani', ui-sans-serif, system-ui, sans-serif;
+      color: #C5C6C7;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+      user-select: none;
+    }
+
+    /* Layered atmosphere: glow mesh + faint tech grid + scanlines + SVG grain. */
+    .arena {
+      background:
+        radial-gradient(1100px 620px at 50% -12%, rgba(69,162,158,0.20), transparent 62%),
+        radial-gradient(760px 520px at 50% 118%, rgba(102,252,241,0.10), transparent 60%),
+        linear-gradient(180deg, #0B0C10 0%, #0E1319 42%, #0B0C10 100%);
+    }
+    .grid-lines {
+      background-image:
+        linear-gradient(rgba(102,252,241,0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(102,252,241,0.045) 1px, transparent 1px);
+      background-size: 36px 36px;
+      -webkit-mask-image: radial-gradient(circle at 50% 38%, #000 32%, transparent 76%);
+              mask-image: radial-gradient(circle at 50% 38%, #000 32%, transparent 76%);
+    }
+    .scanlines::after {
+      content: '';
+      position: absolute; inset: 0; pointer-events: none;
+      background: repeating-linear-gradient(180deg, transparent 0 2px, rgba(0,0,0,0.16) 2px 4px);
+      mix-blend-mode: overlay; opacity: 0.35;
+    }
+    .grain::before {
+      content: '';
+      position: absolute; inset: 0; pointer-events: none; opacity: 0.05;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .neon { text-shadow: 0 0 8px rgba(102,252,241,0.7), 0 0 2px rgba(102,252,241,0.95); }
+    .neon-danger { text-shadow: 0 0 10px rgba(255,77,94,0.85), 0 0 2px rgba(255,77,94,0.95); }
+
+    /* Cylinder physical spin — CSS transform on the SVG group. */
+    .cyl-spin { transition: transform 0.66s cubic-bezier(0.18, 0.86, 0.24, 1); transform-box: view-box; transform-origin: 100px 100px; }
+
+    @keyframes muzzle { 0% { opacity: 0; transform: scale(0.3); } 18% { opacity: 1; } 100% { opacity: 0; transform: scale(2.1); } }
+    .muzzle { animation: muzzle 0.5s ease-out forwards; }
+    @keyframes shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+    .shake { animation: shake 0.42s ease-in-out; }
+    @keyframes riseIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    .rise { animation: riseIn 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    @keyframes sweep { from { transform: translateX(-120%); } to { transform: translateX(320%); } }
+    .sweep { animation: sweep 2.4s linear infinite; }
+
+    .log-scroll::-webkit-scrollbar { width: 6px; }
+    .log-scroll::-webkit-scrollbar-track { background: transparent; }
+    .log-scroll::-webkit-scrollbar-thumb { background: #234; border-radius: 3px; }
+    .tap { transition: transform 0.08s ease, box-shadow 0.2s ease, background 0.2s ease; }
+    .tap:active { transform: translateY(1px) scale(0.985); }
+    .disabled { opacity: 0.4; pointer-events: none; filter: grayscale(0.4); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + htm (JSX-like, no heavy Babel transform — keeps payload tiny) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+      const { useState, useEffect, useRef, useMemo, useCallback } = React;
+      const html = htm.bind(React.createElement);
+
+      /* ------------------------------------------------------------------ *
+       * Config — parsed from the WebView URL (token + userId injected by app)
+       * ------------------------------------------------------------------ */
+      function parseConfig() {
+        const p = new URLSearchParams(window.location.search);
+        return {
+          token: p.get('token') || '',
+          userId: p.get('userId') || 'guest',
+          apiBase: (p.get('api') || '').replace(/\/$/, ''), // '' = same origin
+          gameId: p.get('gameId') || '1', // games_directory id for russian_roulette
+          // No balance endpoint exists yet, so seed a working balance from the URL
+          // (default 1000) and reconcile it from every API response's balance_after.
+          balance: Number(p.get('balance')) || 1000,
+        };
+      }
+
+      /* ------------------------------------------------------------------ *
+       * Small helpers
+       * ------------------------------------------------------------------ */
+      const MIN_BET = 10;
+      const MAX_BET = 500;
+      const CHAMBERS = 6;
+      const HOUSE_EDGE = 0.97;
+      const BET_CHIPS = [10, 25, 50, 100, 250];
+
+      const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+      const fmt = (n) => Number(n).toLocaleString('en-US');
+      const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+      const stamp = () => {
+        const d = new Date();
+        return (
+          String(d.getHours()).padStart(2, '0') + ':' +
+          String(d.getMinutes()).padStart(2, '0') + ':' +
+          String(d.getSeconds()).padStart(2, '0') + '.' +
+          String(d.getMilliseconds()).padStart(3, '0')
+        );
+      };
+      function uuid() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+      }
+      function secureChambers() {
+        // 6 slots, exactly one live round, crypto-shuffled (Fisher-Yates).
+        const arr = Array.from({ length: CHAMBERS }, (_, i) => i === 0);
+        const rand = (max) => {
+          if (window.crypto && crypto.getRandomValues) {
+            const a = new Uint32Array(1);
+            crypto.getRandomValues(a);
+            return a[0] % max;
+          }
+          return Math.floor(Math.random() * max);
+        };
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = rand(i + 1);
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      }
+
+      /* ------------------------------------------------------------------ *
+       * SIMULATION backend — a faithful mirror of the server russian_roulette
+       * engine so the prototype plays fully with no live API. Same multiplier
+       * math (fair odds per pull) + 3% house edge at settle.
+       * ------------------------------------------------------------------ */
+      function createSim(startBalance) {
+        let balance = startBalance;
+        const sessions = new Map();
+        const bulletsFrom = (ch, from) => ch.slice(from).filter(Boolean).length;
+
+        return {
+          get balance() { return balance; },
+          initiate(gameId, pointsBet) {
+            if (pointsBet > balance) {
+              const e = new Error('Insufficient points balance');
+              e.code = 'INSUFFICIENT_FUNDS';
+              throw e;
+            }
+            balance -= pointsBet;
+            const id = uuid();
+            sessions.set(id, { chambers: secureChambers(), pos: 0, pulls: 0, multBps: 10000, bet: pointsBet, outcome: 'IN_PROGRESS' });
+            return { session_id: id, game_id: gameId, points_bet: pointsBet, balance_after: String(balance) };
+          },
+          process(sessionId, payload) {
+            const s = sessions.get(sessionId);
+            if (!s) { const e = new Error('Session not found'); e.code = 'NOT_FOUND'; throw e; }
+            if (s.outcome !== 'IN_PROGRESS') { const e = new Error('Game is already over'); e.code = 'CONFLICT'; throw e; }
+            const action = payload && payload.action;
+
+            if (action === 'cashout') {
+              s.outcome = 'CASHED_OUT';
+              return { session_id: sessionId, status: 'WIN', step: { action: 'cashout', pulls: s.pulls, multiplier: s.multBps / 10000 }, settlement: this._settle(s, sessionId) };
+            }
+            if (action !== 'pull') { const e = new Error('Unknown action'); e.code = 'VALIDATION_ERROR'; throw e; }
+
+            const chambersRemaining = CHAMBERS - s.pos;
+            const bulletsRemaining = bulletsFrom(s.chambers, s.pos);
+            const safeRemaining = chambersRemaining - bulletsRemaining;
+            const isBullet = s.chambers[s.pos];
+
+            if (isBullet) {
+              s.pos += 1;
+              s.outcome = 'DEAD';
+              return { session_id: sessionId, status: 'LOSE', step: { action: 'pull', survived: false, chamber: 'bullet', pulls: s.pulls, multiplier: s.multBps / 10000 }, settlement: this._settle(s, sessionId) };
+            }
+            s.multBps = Math.floor((s.multBps * chambersRemaining) / safeRemaining);
+            s.pos += 1;
+            s.pulls += 1;
+            const cashedOut = s.pos >= CHAMBERS;
+            if (cashedOut) s.outcome = 'CASHED_OUT';
+            const step = { action: 'pull', survived: true, chamber: 'safe', pulls: s.pulls, chambersLeft: CHAMBERS - s.pos, multiplier: s.multBps / 10000 };
+            return { session_id: sessionId, status: cashedOut ? 'WIN' : 'CONTINUE', step, settlement: cashedOut ? this._settle(s, sessionId) : null };
+          },
+          settle(sessionId) {
+            const s = sessions.get(sessionId);
+            if (!s) { const e = new Error('Session not found'); e.code = 'NOT_FOUND'; throw e; }
+            return { session_id: sessionId, status: 'SETTLED', ...this._settle(s, sessionId) };
+          },
+          _settle(s, sessionId) {
+            if (s.settled) return { payout: String(s.payout), balance_after: String(balance) };
+            const payout = s.outcome === 'DEAD' ? 0 : Math.floor(s.bet * (s.multBps / 10000) * HOUSE_EDGE);
+            balance += payout;
+            s.settled = true;
+            s.payout = payout;
+            if (s.outcome === 'IN_PROGRESS') s.outcome = 'CASHED_OUT';
+            return { payout: String(payout), balance_after: String(balance) };
+          },
+        };
+      }
+
+      /* ------------------------------------------------------------------ *
+       * API layer — the three mandated hooks. Each logs its full request /
+       * response lifecycle (console + on-screen terminal) and routes to the
+       * live backend or the local simulation based on the resolved mode.
+       * ------------------------------------------------------------------ */
+      function createApi({ cfg, getMode, sim, log }) {
+        async function callLive(method, path, body) {
+          const url = `${cfg.apiBase}${path}`;
+          const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+            body: body ? JSON.stringify(body) : undefined,
+          });
+          let json = null;
+          try { json = await res.json(); } catch (_e) { /* non-JSON */ }
+          if (!res.ok || !json || json.success === false) {
+            const err = new Error((json && json.error && json.error.message) || `HTTP ${res.status}`);
+            err.code = (json && json.error && json.error.code) || `HTTP_${res.status}`;
+            throw err;
+          }
+          return json.data;
+        }
+
+        function lifecycle(name, reqLine, runner) {
+          log('req', `→ ${name}  ${reqLine}`);
+          console.log(`%c[API →] ${name}`, 'color:#66FCF1', reqLine);
+          return runner()
+            .then((data) => {
+              log('res', `← ${name}  ${JSON.stringify(data)}`);
+              console.log(`%c[API ←] ${name}`, 'color:#45A29E', data);
+              return data;
+            })
+            .catch((err) => {
+              log('err', `✕ ${name}  ${err.code || 'ERROR'}: ${err.message}`);
+              console.error(`[API ✕] ${name}`, err);
+              throw err;
+            });
+        }
+
+        // Hook 1 — fires when the user places a bet / starts a round.
+        function initiateGameSession(gameId, pointsBet) {
+          return lifecycle('initiateGameSession', `POST /api/game/initiate {game_id:${gameId}, points_bet:${pointsBet}}`, () =>
+            getMode() === 'live'
+              ? callLive('POST', '/api/game/initiate', { game_id: Number(gameId), points_bet: pointsBet })
+              : Promise.resolve().then(() => sim.initiate(gameId, pointsBet))
+          );
+        }
+
+        // Hook 2 — fires during intermediate actions (trigger pulls, draws...).
+        function processGameAction(sessionId, actionPayload) {
+          return lifecycle('processGameAction', `POST /api/game/process {session_id:${sessionId}, ${JSON.stringify(actionPayload)}}`, () =>
+            getMode() === 'live'
+              ? callLive('POST', '/api/game/process', { session_id: sessionId, ...actionPayload })
+              : Promise.resolve().then(() => sim.process(sessionId, actionPayload))
+          );
+        }
+
+        // Hook 3 — fires when the game finishes / the user cashes out.
+        function settleGameSession(sessionId) {
+          return lifecycle('settleGameSession', `POST /api/game/settle {session_id:${sessionId}}`, () =>
+            getMode() === 'live'
+              ? callLive('POST', '/api/game/settle', { session_id: sessionId })
+              : Promise.resolve().then(() => sim.settle(sessionId))
+          );
+        }
+
+        return { initiateGameSession, processGameAction, settleGameSession };
+      }
+
+      /* ================================================================== *
+       * UI COMPONENTS
+       * ================================================================== */
+
+      function ConnectionBadge({ mode, userId }) {
+        const map = {
+          connecting: ['LINKING', 'text-titanium', 'bg-titanium/60', 'animate-pulse'],
+          live: ['LIVE', 'text-aqua', 'bg-aqua', 'shadow-neon'],
+          sim: ['SIMULATION', 'text-neon', 'bg-neon', ''],
+        };
+        const [label, tc, dot, extra] = map[mode] || map.connecting;
+        return html`
+          <div class="flex items-center gap-2 font-mono text-[10px] tracking-widest ${tc}">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-2 w-2 rounded-full ${dot} opacity-70 ${extra}"></span>
+              <span class="relative inline-flex h-2 w-2 rounded-full ${dot}"></span>
+            </span>
+            ${label}
+            <span class="text-titanium/40">·</span>
+            <span class="text-titanium/70">@${userId}</span>
+          </div>
+        `;
+      }
+
+      function BalancePanel({ balance }) {
+        return html`
+          <div class="relative overflow-hidden rounded-xl border border-neon/30 bg-charcoal/70 px-4 py-2 shadow-panel">
+            <div class="pointer-events-none absolute inset-y-0 left-0 w-16 -skew-x-12 bg-gradient-to-r from-aqua/10 to-transparent sweep"></div>
+            <div class="font-mono text-[9px] uppercase tracking-arcade text-titanium/60">Balance</div>
+            <div class="font-display text-2xl font-800 leading-none text-aqua neon">
+              ${fmt(balance)}<span class="ml-1 font-body text-xs font-600 text-titanium/70">pts</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // Hand-built SVG revolver cylinder with CSS-3D tilt + physical spin.
+      function Cylinder({ spinDeg, pulls, dead, flash, busy }) {
+        const centers = Array.from({ length: CHAMBERS }, (_, i) => {
+          const a = (i * 60 - 90) * (Math.PI / 180);
+          return { x: 100 + 54 * Math.cos(a), y: 100 + 54 * Math.sin(a) };
+        });
+        const fatalIdx = Math.min(pulls, CHAMBERS - 1);
+        return html`
+          <div class="relative mx-auto ${dead ? 'shake' : ''}" style=${{ perspective: '900px' }}>
+            <div style=${{ transform: 'rotateX(16deg)' }}>
+              <svg viewBox="0 0 200 200" class="mx-auto block w-[min(70vw,300px)] drop-shadow-[0_0_20px_rgba(102,252,241,0.25)]" role="img" aria-label="Revolver cylinder">
+                <defs>
+                  <radialGradient id="body" cx="50%" cy="42%" r="70%">
+                    <stop offset="0%" stop-color="#243642" />
+                    <stop offset="70%" stop-color="#1F2833" />
+                    <stop offset="100%" stop-color="#0B0C10" />
+                  </radialGradient>
+                  <radialGradient id="hub" cx="50%" cy="40%" r="60%">
+                    <stop offset="0%" stop-color="#66FCF1" stop-opacity="0.35" />
+                    <stop offset="100%" stop-color="#0B0C10" stop-opacity="0.9" />
+                  </radialGradient>
+                  <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+                    <feGaussianBlur stdDeviation="2.4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                </defs>
+
+                <!-- outer ring -->
+                <circle cx="100" cy="100" r="95" fill="none" stroke="#45A29E" stroke-opacity="0.35" stroke-width="1" />
+                <circle cx="100" cy="100" r="90" fill="url(#body)" stroke="#45A29E" stroke-opacity="0.7" stroke-width="1.5" />
+
+                <!-- rotating chamber assembly -->
+                <g class="cyl-spin" style=${{ transform: `rotate(${spinDeg}deg)` }}>
+                  <circle cx="100" cy="100" r="80" fill="none" stroke="#45A29E" stroke-opacity="0.25" stroke-dasharray="2 6" />
+                  ${centers.map((c, i) => {
+                    const state = dead && i === fatalIdx ? 'bullet' : i < pulls ? 'safe' : 'idle';
+                    const fill = state === 'bullet' ? 'rgba(255,77,94,0.28)' : state === 'safe' ? 'rgba(102,252,241,0.18)' : '#12222b';
+                    const stroke = state === 'bullet' ? '#FF4D5E' : state === 'safe' ? '#66FCF1' : '#45A29E';
+                    const op = state === 'idle' ? '0.55' : '1';
+                    return html`
+                      <g key=${i} filter=${state === 'idle' ? undefined : 'url(#glow)'} style=${{ opacity: op }}>
+                        <circle cx=${c.x} cy=${c.y} r="17" fill=${fill} stroke=${stroke} stroke-width="2" />
+                        <circle cx=${c.x} cy=${c.y} r="8" fill="none" stroke=${stroke} stroke-opacity="0.6" stroke-width="1" />
+                        ${state === 'bullet'
+                          ? html`<circle cx=${c.x} cy=${c.y} r="4.5" fill="#FF4D5E" />`
+                          : state === 'safe'
+                          ? html`<circle cx=${c.x} cy=${c.y} r="3" fill="#66FCF1" />`
+                          : null}
+                      </g>
+                    `;
+                  })}
+                  <!-- center hub -->
+                  <circle cx="100" cy="100" r="22" fill="url(#hub)" stroke="#66FCF1" stroke-opacity="0.5" stroke-width="1.5" />
+                  <circle cx="100" cy="100" r="8" fill="#0B0C10" stroke="#66FCF1" stroke-width="1.5" filter="url(#glow)" />
+                </g>
+
+                <!-- fixed firing marker (hammer position) at top -->
+                <g filter="url(#glow)">
+                  <polygon points="100,18 92,4 108,4" fill=${dead ? '#FF4D5E' : '#66FCF1'} />
+                  <circle cx="100" cy="30" r="6" fill="none" stroke=${dead ? '#FF4D5E' : '#66FCF1'} stroke-width="2" />
+                </g>
+
+                <!-- muzzle flash on elimination -->
+                ${dead && flash === 'bullet'
+                  ? html`<circle class="muzzle" cx="100" cy="30" r="18" fill="#FF4D5E" fill-opacity="0.7" />`
+                  : null}
+                ${busy && !dead
+                  ? html`<circle cx="100" cy="100" r="90" fill="none" stroke="#66FCF1" stroke-opacity="0.5" stroke-width="1" stroke-dasharray="6 10" class="animate-pulse-glow" />`
+                  : null}
+              </svg>
+            </div>
+          </div>
+        `;
+      }
+
+      function StatReadout({ pulls, multiplier, potential, phase }) {
+        const live = phase === 'playing' || phase === 'busy';
+        return html`
+          <div class="grid grid-cols-3 gap-2">
+            <div class="rounded-lg border border-neon/20 bg-charcoal/50 px-2 py-2 text-center">
+              <div class="font-mono text-[8px] uppercase tracking-widest text-titanium/50">Survived</div>
+              <div class="font-display text-lg font-700 text-platinum">${pulls}<span class="text-xs text-titanium/50">/5</span></div>
+            </div>
+            <div class="rounded-lg border ${live ? 'border-aqua/50 shadow-neon-sm' : 'border-neon/20'} bg-charcoal/50 px-2 py-2 text-center">
+              <div class="font-mono text-[8px] uppercase tracking-widest text-titanium/50">Multiplier</div>
+              <div class="font-display text-lg font-800 text-aqua ${live ? 'neon' : ''}">${multiplier.toFixed(2)}×</div>
+            </div>
+            <div class="rounded-lg border border-neon/20 bg-charcoal/50 px-2 py-2 text-center">
+              <div class="font-mono text-[8px] uppercase tracking-widest text-titanium/50">Cash Value</div>
+              <div class="font-display text-lg font-700 text-platinum">${fmt(potential)}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      function BetSelector({ bet, setBet, balance, disabled }) {
+        return html`
+          <div class=${disabled ? 'disabled' : ''}>
+            <div class="mb-2 flex items-center justify-between">
+              <span class="font-mono text-[9px] uppercase tracking-arcade text-titanium/60">Stake</span>
+              <span class="font-display text-sm font-700 text-aqua neon">${fmt(bet)} pts</span>
+            </div>
+            <div class="grid grid-cols-5 gap-1.5">
+              ${BET_CHIPS.map((c) => {
+                const active = bet === c;
+                const tooRich = c > balance;
+                return html`
+                  <button
+                    key=${c}
+                    onClick=${() => !tooRich && setBet(c)}
+                    class="tap rounded-lg border py-2 font-display text-sm font-700 ${active
+                      ? 'border-aqua bg-aqua/15 text-aqua shadow-neon-sm'
+                      : 'border-neon/25 bg-charcoal/40 text-titanium'} ${tooRich ? 'disabled' : ''}"
+                  >${c}</button>
+                `;
+              })}
+            </div>
+            <input
+              type="range" min=${MIN_BET} max=${Math.min(MAX_BET, Math.max(MIN_BET, balance))} step="5"
+              value=${clamp(bet, MIN_BET, MAX_BET)}
+              onInput=${(e) => setBet(Number(e.target.value))}
+              class="mt-3 h-1 w-full cursor-pointer appearance-none rounded-full bg-neon/25 accent-aqua"
+            />
+          </div>
+        `;
+      }
+
+      function ActionBar({ phase, busy, canBet, bet, multiplier, onBet, onPull, onCash, onReset }) {
+        const base = 'tap w-full rounded-xl py-4 font-display font-800 uppercase tracking-widest';
+        if (phase === 'betting') {
+          return html`
+            <button onClick=${onBet} class="${base} bg-aqua text-midnight shadow-neon-lg ${!canBet || busy ? 'disabled' : ''}">
+              ${busy ? 'Spinning…' : `Place ${fmt(bet)} · Spin Cylinder`}
+            </button>
+          `;
+        }
+        if (phase === 'playing' || phase === 'busy') {
+          return html`
+            <div class="grid grid-cols-5 gap-2">
+              <button onClick=${onPull} class="${base} col-span-3 border-2 border-danger bg-danger/15 text-danger shadow-danger ${busy ? 'disabled' : ''}">
+                ${busy ? '…' : 'Pull Trigger'}
+              </button>
+              <button onClick=${onCash} class="${base} col-span-2 border-2 border-aqua bg-aqua/15 text-aqua shadow-neon-sm ${busy ? 'disabled' : ''}">
+                Cash Out
+              </button>
+            </div>
+          `;
+        }
+        return html`
+          <button onClick=${onReset} class="${base} border-2 border-neon bg-charcoal text-aqua shadow-neon-sm">
+            Play Again
+          </button>
+        `;
+      }
+
+      function ResultOverlay({ result, bet }) {
+        if (!result) return null;
+        const dead = result.kind === 'dead';
+        return html`
+          <div class="rise pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-6">
+            <div class="w-full rounded-2xl border ${dead ? 'border-danger/60' : 'border-aqua/60'} bg-midnight/85 p-6 text-center backdrop-blur-sm shadow-panel">
+              <div class="font-display text-3xl font-900 uppercase tracking-widest ${dead ? 'text-danger neon-danger' : 'text-aqua neon'}">
+                ${dead ? 'Eliminated' : 'Cashed Out'}
+              </div>
+              <div class="mt-2 font-body text-sm text-titanium">
+                ${dead
+                  ? html`The chamber was loaded. Stake of ${fmt(bet)} pts lost.`
+                  : html`Banked <span class="font-display font-800 text-platinum">+${fmt(result.payout)}</span> pts at <span class="text-aqua">${result.multiplier.toFixed(2)}×</span>.`}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      function SystemLog({ logs }) {
+        const ref = useRef(null);
+        useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [logs]);
+        const color = { req: 'text-aqua', res: 'text-neon', err: 'text-danger', info: 'text-titanium/70' };
+        return html`
+          <div class="rounded-xl border border-neon/20 bg-black/50 shadow-panel">
+            <div class="flex items-center justify-between border-b border-neon/15 px-3 py-1.5">
+              <span class="font-mono text-[9px] uppercase tracking-arcade text-titanium/60">System · API Lifecycle</span>
+              <span class="flex gap-1"><i class="h-1.5 w-1.5 rounded-full bg-danger/70"></i><i class="h-1.5 w-1.5 rounded-full bg-neon/70"></i><i class="h-1.5 w-1.5 rounded-full bg-aqua/70"></i></span>
+            </div>
+            <div ref=${ref} class="log-scroll h-24 overflow-y-auto px-3 py-2 font-mono text-[10px] leading-relaxed">
+              ${logs.length === 0
+                ? html`<div class="text-titanium/40">// awaiting first action…</div>`
+                : logs.map((l, i) => html`<div key=${i} class=${color[l.level] || 'text-titanium/70'}><span class="text-titanium/30">${l.t}</span> ${l.msg}</div>`)}
+            </div>
+          </div>
+        `;
+      }
+
+      /* ================================================================== *
+       * APP
+       * ================================================================== */
+      function App() {
+        const cfg = useMemo(parseConfig, []);
+        const simRef = useRef(null);
+        if (!simRef.current) simRef.current = createSim(cfg.balance);
+
+        const [mode, setMode] = useState('connecting'); // connecting | live | sim
+        const modeRef = useRef('sim');
+        const [balance, setBalance] = useState(cfg.balance);
+        const [bet, setBet] = useState(50);
+        const [session, setSession] = useState(null);
+        const [phase, setPhase] = useState('betting'); // betting | playing | busy | dead | cashed
+        const [pulls, setPulls] = useState(0);
+        const [multiplier, setMultiplier] = useState(1);
+        const [spinDeg, setSpinDeg] = useState(0);
+        const [flash, setFlash] = useState(null);
+        const [result, setResult] = useState(null);
+        const [busy, setBusy] = useState(false);
+        const [logs, setLogs] = useState([]);
+
+        const log = useCallback((level, msg) => {
+          setLogs((prev) => [...prev.slice(-49), { t: stamp(), level, msg }]);
+        }, []);
+
+        const api = useMemo(
+          () => createApi({ cfg, getMode: () => modeRef.current, sim: simRef.current, log }),
+          [cfg, log]
+        );
+
+        // Resolve connection mode once at launch (probe /health with the token).
+        useEffect(() => {
+          let alive = true;
+          (async () => {
+            log('info', `boot · user @${cfg.userId} · api "${cfg.apiBase || 'same-origin'}"`);
+            if (!cfg.token) {
+              log('info', 'no JWT in URL → SIMULATION mode (offline prototype)');
+              modeRef.current = 'sim';
+              if (alive) setMode('sim');
+              return;
+            }
+            try {
+              const res = await fetch(`${cfg.apiBase}/health`, { method: 'GET' });
+              if (res.ok) {
+                modeRef.current = 'live';
+                if (alive) setMode('live');
+                log('info', 'backend /health OK → LIVE mode');
+                log('info', 'note: no balance endpoint yet — reconciling from API responses');
+              } else throw new Error(`health ${res.status}`);
+            } catch (e) {
+              modeRef.current = 'sim';
+              if (alive) setMode('sim');
+              log('info', `backend unreachable (${e.message}) → SIMULATION fallback`);
+            }
+          })();
+          return () => { alive = false; };
+        }, [cfg, log]);
+
+        const canBet = bet >= MIN_BET && bet <= balance && mode !== 'connecting' && !busy;
+        const potential = session ? Math.floor(session.bet * multiplier * HOUSE_EDGE) : Math.floor(bet * HOUSE_EDGE);
+
+        const onBet = useCallback(async () => {
+          if (!canBet) return;
+          setBusy(true);
+          setPhase('busy');
+          setResult(null);
+          setPulls(0);
+          setMultiplier(1);
+          setFlash(null);
+          setSpinDeg((d) => d + 720 + Math.floor(Math.random() * 6) * 60); // dramatic load spin
+          try {
+            const data = await api.initiateGameSession(cfg.gameId, bet);
+            setSession({ id: data.session_id, bet: Number(data.points_bet) });
+            if (data.balance_after != null) setBalance(Number(data.balance_after));
+            await delay(680); // let the cylinder settle
+            setPhase('playing');
+          } catch (e) {
+            setPhase('betting');
+            log('info', e.code === 'INSUFFICIENT_FUNDS' ? 'not enough points for that stake' : 'could not start round');
+          } finally {
+            setBusy(false);
+          }
+        }, [api, bet, canBet, cfg.gameId, log]);
+
+        const onPull = useCallback(async () => {
+          if (!session || busy) return;
+          setBusy(true);
+          setPhase('busy');
+          setSpinDeg((d) => d + 60);
+          try {
+            const data = await api.processGameAction(session.id, { action: 'pull' });
+            const step = data.step || {};
+            await delay(560); // sync reveal with the cylinder rotation
+            if (typeof step.multiplier === 'number') setMultiplier(step.multiplier);
+            if (typeof step.pulls === 'number') setPulls(step.pulls);
+
+            if (step.survived === false || data.status === 'LOSE') {
+              setFlash('bullet');
+              setPhase('dead');
+              const s = data.settlement || {};
+              if (s.balance_after != null) setBalance(Number(s.balance_after));
+              setResult({ kind: 'dead', payout: 0 });
+            } else if (data.status === 'WIN') {
+              // survived the final chamber → forced cash out
+              const s = data.settlement || {};
+              if (s.balance_after != null) setBalance(Number(s.balance_after));
+              setPhase('cashed');
+              setResult({ kind: 'cashed', payout: Number((s && s.payout) || 0), multiplier: step.multiplier || multiplier });
+            } else {
+              setFlash('safe');
+              setPhase('playing');
+            }
+          } catch (e) {
+            setPhase('playing');
+          } finally {
+            setBusy(false);
+          }
+        }, [api, session, busy, multiplier]);
+
+        const onCash = useCallback(async () => {
+          if (!session || busy) return;
+          setBusy(true);
+          setPhase('busy');
+          try {
+            const data = await api.settleGameSession(session.id);
+            if (data.balance_after != null) setBalance(Number(data.balance_after));
+            setPhase('cashed');
+            setResult({ kind: 'cashed', payout: Number(data.payout || 0), multiplier });
+          } catch (e) {
+            setPhase('playing');
+          } finally {
+            setBusy(false);
+          }
+        }, [api, session, busy, multiplier]);
+
+        const onReset = useCallback(() => {
+          setSession(null);
+          setResult(null);
+          setPulls(0);
+          setMultiplier(1);
+          setFlash(null);
+          setPhase('betting');
+        }, []);
+
+        const dead = phase === 'dead';
+
+        return html`
+          <div class="arena grain scanlines relative min-h-[100dvh] w-full">
+            <div class="pointer-events-none absolute inset-0 grid-lines"></div>
+
+            <main class="relative mx-auto flex min-h-[100dvh] w-full max-w-md flex-col gap-3 px-4 pb-5 pt-4">
+              <!-- header -->
+              <header class="flex items-center justify-between">
+                <div>
+                  <h1 class="font-display text-lg font-900 uppercase tracking-arcade text-platinum">Chamber</h1>
+                  <p class="-mt-0.5 font-mono text-[9px] uppercase tracking-widest text-neon">Neo-Noir · Russian Roulette</p>
+                </div>
+                <${ConnectionBadge} mode=${mode} userId=${cfg.userId} />
+              </header>
+
+              <${BalancePanel} balance=${balance} />
+
+              <!-- arena -->
+              <section class="relative flex flex-1 flex-col justify-center gap-4">
+                <${ResultOverlay} result=${result} bet=${session ? session.bet : bet} />
+                <${Cylinder} spinDeg=${spinDeg} pulls=${pulls} dead=${dead} flash=${flash} busy=${busy} />
+                <p class="text-center font-body text-xs text-titanium/60">
+                  ${phase === 'betting'
+                    ? 'One chamber is loaded. Pull to grow your multiplier — cash out before it fires.'
+                    : phase === 'playing'
+                    ? 'Pull again for a bigger multiplier, or cash out now.'
+                    : dead
+                    ? 'The odds caught up with you.'
+                    : phase === 'cashed'
+                    ? 'Points banked. Spin again?'
+                    : '…'}
+                </p>
+                <${StatReadout} pulls=${pulls} multiplier=${multiplier} potential=${potential} phase=${phase} />
+              </section>
+
+              <!-- controls -->
+              <section class="flex flex-col gap-3">
+                ${phase === 'betting' ? html`<${BetSelector} bet=${bet} setBet=${setBet} balance=${balance} disabled=${busy} />` : null}
+                <${ActionBar}
+                  phase=${phase} busy=${busy} canBet=${canBet} bet=${bet} multiplier=${multiplier}
+                  onBet=${onBet} onPull=${onPull} onCash=${onCash} onReset=${onReset}
+                />
+              </section>
+
+              <${SystemLog} logs=${logs} />
+            </main>
+          </div>
+        `;
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(html`<${App} />`);
+    })();
+  </script>
+</body>
+</html>
