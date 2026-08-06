@@ -4,6 +4,7 @@ const express = require('express');
 const helmet = require('helmet');
 const gameRoutes = require('./routes/gameRoutes');
 const leaderboardRoutes = require('./routes/leaderboardRoutes');
+const skillRoutes = require('./routes/skillRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 // Side-effect require: registers per-game settlement resolvers at startup.
@@ -25,6 +26,7 @@ function createApp() {
 
   app.use('/api/game', gameRoutes);
   app.use('/api/leaderboard', leaderboardRoutes);
+  app.use('/api/skill', skillRoutes);
 
   // 404 for anything unmatched.
   app.use((_req, res) => {

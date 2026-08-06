@@ -33,11 +33,17 @@ const initiateRateLimiter = perUserLimiter(30);
 const settleRateLimiter = perUserLimiter(60);
 const processRateLimiter = perUserLimiter(120);
 const leaderboardRateLimiter = perUserLimiter(120);
+// Skill: submit is the reward-granting call — throttle it to blunt brute-force
+// against a session; start slightly higher; leaderboard reads generous.
+const skillStartRateLimiter = perUserLimiter(60);
+const skillSubmitRateLimiter = perUserLimiter(30);
 
 module.exports = {
   initiateRateLimiter,
   settleRateLimiter,
   processRateLimiter,
   leaderboardRateLimiter,
+  skillStartRateLimiter,
+  skillSubmitRateLimiter,
   perUserLimiter,
 };

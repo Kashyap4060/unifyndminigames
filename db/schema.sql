@@ -86,10 +86,11 @@ CREATE TABLE IF NOT EXISTS points_ledger (
   user_id       BIGINT UNSIGNED NOT NULL,
   session_id    CHAR(36)        NULL,
   entry_type    ENUM('DEBIT','CREDIT') NOT NULL,
-  reason        ENUM('GAME_BET','GAME_PAYOUT','COUPON_REDEEM','REFERRAL_BONUS','ADJUSTMENT')
+  reason        ENUM('GAME_BET','GAME_PAYOUT','COUPON_REDEEM','REFERRAL_BONUS','ADJUSTMENT','SKILL_REWARD')
                                 NOT NULL,
   amount        BIGINT          NOT NULL COMMENT 'Signed: negative for DEBIT, positive for CREDIT',
   balance_after BIGINT UNSIGNED NOT NULL COMMENT 'Running balance snapshot for reconciliation',
+  reference     VARCHAR(64)     NULL COMMENT 'External ref (e.g. skill_session_id) when session_id FK does not apply',
   created_at    TIMESTAMP(3)    NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (ledger_id),
   KEY idx_ledger_user (user_id, created_at),
@@ -127,6 +128,46 @@ CREATE TABLE IF NOT EXISTS leaderboard_scores (
   -- Serves the top-N fallback query without a filesort.
   KEY idx_leaderboard_rank (period_type, period_key, score DESC, user_id),
   CONSTRAINT fk_leaderboard_user FOREIGN KEY (user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -----------------------------------------------------------------------------
+-- skill_sessions — lifecycle for Part B skill/engagement games. The client
+-- plays locally after /api/skill/start; /api/skill/submit validates the claimed
+-- result server-side and awards a SKILL_REWARD. status guards single-submit.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS skill_sessions (
+  session_id   CHAR(36)        NOT NULL,
+  user_id      BIGINT UNSIGNED NOT NULL,
+  game_id      BIGINT UNSIGNED NOT NULL,
+  status       ENUM('STARTED','SUBMITTED','EXPIRED') NOT NULL DEFAULT 'STARTED',
+  issued_at    BIGINT UNSIGNED NOT NULL COMMENT 'epoch ms the seed token was issued (for submit deadline + time plausibility)',
+  score        BIGINT          NULL,
+  reward       BIGINT UNSIGNED NULL,
+  created_at   TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  submitted_at TIMESTAMP       NULL,
+  PRIMARY KEY (session_id),
+  KEY idx_skill_user (user_id, created_at),
+  CONSTRAINT fk_skill_user FOREIGN KEY (user_id) REFERENCES users (user_id),
+  CONSTRAINT fk_skill_game FOREIGN KEY (game_id) REFERENCES games_directory (game_id),
+  -- Defense in depth mirroring config.skill.maxReward (keep in sync): a DB-layer
+  -- ceiling so no code path can persist an absurd skill reward.
+  CONSTRAINT chk_skill_reward_cap CHECK (reward IS NULL OR reward <= 100000),
+  CONSTRAINT chk_skill_score_nonneg CHECK (score IS NULL OR score >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -----------------------------------------------------------------------------
+-- skill_high_scores — per-game best score (keep-max), the durable store behind
+-- the skill high-score leaderboard (Redis ZADD GT is the hot cache).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS skill_high_scores (
+  game_id    BIGINT UNSIGNED NOT NULL,
+  user_id    BIGINT UNSIGNED NOT NULL,
+  best_score BIGINT          NOT NULL,
+  updated_at TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (game_id, user_id),
+  KEY idx_skill_hs_rank (game_id, best_score DESC, user_id),
+  CONSTRAINT fk_skillhs_user FOREIGN KEY (user_id) REFERENCES users (user_id),
+  CONSTRAINT fk_skillhs_game FOREIGN KEY (game_id) REFERENCES games_directory (game_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------------------------------

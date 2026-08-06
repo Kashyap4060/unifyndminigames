@@ -79,6 +79,15 @@ const config = Object.freeze({
       }),
     }),
   }),
+  skill: Object.freeze({
+    // Secret for signing skill-session seed tokens and deriving per-session game
+    // content (e.g. the Anagram letter rack). Never exposed to clients. Falls back to JWT_SECRET.
+    seedSecret: process.env.SKILL_SEED_SECRET || required('JWT_SECRET'),
+    // A skill session must be submitted within this window of /start (anti-replay + stale sessions).
+    submitWindowMs: intWithDefault('SKILL_SUBMIT_WINDOW_MS', 3600000), // 1 hour
+    // Absolute ceiling on a single skill reward (defense in depth vs a buggy engine).
+    maxReward: intWithDefault('SKILL_MAX_REWARD', 100000),
+  }),
 });
 
 module.exports = config;

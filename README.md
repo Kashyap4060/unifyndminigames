@@ -298,6 +298,53 @@ idempotent-replay double-counting, so a retried settle can't inflate the board. 
 **Tests:** `node --test "test/leaderboard/**/*.test.js"` — pure unit tests (no Redis/DB needed):
 key/period/UTC math and the full Redis→MySQL fallback logic via injected stubs.
 
+## Skill games (Part B — score submission)
+
+Part B games (`microgames.md` #16–30) are skill/engagement games: the client plays locally, then
+the server **validates a claimed result** and awards loyalty points. This is a separate subsystem
+from the Part A betting engines. Module: `src/skill/`.
+
+```
+src/skill/BaseSkillGame.js     Abstract contract: start(ctx) / validate(ctx)
+src/skill/registry.js          game_key -> skill engine (fail-closed)
+src/skill/seed.js              Signed seed token + server-only hidden-seed derivation (HMAC)
+src/skill/skillRepository.js   skill_sessions + skill_high_scores persistence
+src/skill/skillService.js      start + submit (validate, reward credit, high score)
+src/skill/games/*.js           Engines: wordle, endless_runner
+src/routes/skillRoutes.js      POST /api/skill/{start,submit}, GET /api/skill/leaderboard
+```
+
+**Flow:**
+- `POST /api/skill/start` `{ game_id }` → `201 { session_id, seed_token, ...public config }`. Creates a
+  `skill_sessions` row (STARTED) and returns an HMAC **seed token** the client echoes at submit.
+- `POST /api/skill/submit` `{ session_id, seed_token, submission }` → validates server-side and, if
+  valid, credits a `SKILL_REWARD` into `points_balance` (+`points_ledger`), marks the session
+  SUBMITTED, records the high score. Returns `{ valid, score, reward, balance_after, replay }`.
+- `GET /api/skill/leaderboard?game_id=&limit=` → per-game high scores (keep-max) with pseudonymous aliases.
+
+**Anti-cheat (validate server-side; the score must be provably backed by real work):**
+- The reward is computed **only** by the engine's `validate()` from server-verified results — never
+  from a client-supplied amount — and is capped by `SKILL_MAX_REWARD` (with a DB `CHECK` mirror).
+- **Single-submit**: `skill_sessions` is `FOR UPDATE`-locked and flipped STARTED→SUBMITTED with a
+  guarded update in the same transaction as the credit, so a session can't be rewarded twice; a
+  re-submit is an idempotent replay (no second credit).
+- **Forgery/tamper**: the seed token is HMAC-verified (timing-safe); a per-session **hidden seed** is
+  derived server-side and is *not* derivable from the public token.
+- **Bounds + plausibility**: submit deadline (`SKILL_SUBMIT_WINDOW_MS`) and server-measured
+  elapsed-time plausibility (min time per unit of score).
+
+**Reference engines:**
+- `anagram` (#22) — **fully server-validated**: the letter rack is derived from the seed; each
+  submitted word must be a real dictionary word *buildable from the rack*, so the score is provably
+  backed by real words (not a self-reported number), plus a min-time-per-word bound.
+- `endless_runner` (#19) — **proof-of-play via replay**: the server derives a deterministic obstacle
+  course from the session id; the client submits its input (jump) log; the server **re-simulates** to
+  derive the authoritative score, so a claimed score must be achievable by the submitted inputs, and
+  the score must fit the elapsed play time. (Residual: a bot that computes optimal inputs and waits
+  the required time can still play — full defeat needs behavioral/bot detection, a documented next step.)
+
+Adding a skill game = a file in `src/skill/games/` + one `registerSkillGame` line in `src/skill/index.js`.
+
 ## Suggested next steps
 
 - Add the remaining games as engines in `src/engines/` + one `registerEngine()` line each.
