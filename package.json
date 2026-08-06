@@ -1,0 +1,22 @@
+{
+  "name": "gaming-economy-engine",
+  "version": "1.0.0",
+  "description": "Transactional economy engine for the modular in-app gaming ecosystem (MySQL 8.x + Express).",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=16.17"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.11.0"
+  }
+}
