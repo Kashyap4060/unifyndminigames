@@ -3,12 +3,15 @@
 const config = require('./config');
 const pool = require('./db/pool');
 const { createApp } = require('./app');
-const { closeLeaderboard } = require('./leaderboard');
+const { startLeaderboardJobs, closeLeaderboard } = require('./leaderboard');
 
 const app = createApp();
 const server = app.listen(config.port, () => {
   // eslint-disable-next-line no-console
   console.log(`Gaming economy engine listening on port ${config.port}`);
+  const jobs = startLeaderboardJobs();
+  // eslint-disable-next-line no-console
+  console.log(`Leaderboard reconciliation jobs scheduled: ${jobs}`);
 });
 
 /**

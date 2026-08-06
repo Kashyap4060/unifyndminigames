@@ -5,6 +5,7 @@ const pool = require('../db/pool');
 const { createRedisClient } = require('../redis/client');
 const { LeaderboardRepository } = require('./leaderboardRepository');
 const { LeaderboardService } = require('./leaderboardService');
+const { createReconciliationScheduler } = require('./scheduler');
 
 /**
  * Wires the production leaderboard service: the shared MySQL pool as the durable
@@ -20,8 +21,20 @@ const leaderboardService = new LeaderboardService({
   ttl: config.redis.ttl,
 });
 
-/** Close the Redis connection during graceful shutdown. */
+const reconciliationScheduler = createReconciliationScheduler({
+  leaderboardService,
+  schedules: config.leaderboard.reconcile.schedules,
+});
+
+/** Start the periodic reconciliation cron (call once at server startup). */
+function startLeaderboardJobs() {
+  if (!config.leaderboard.reconcile.enabled) return 0;
+  return reconciliationScheduler.start();
+}
+
+/** Stop cron jobs and close the Redis connection during graceful shutdown. */
 async function closeLeaderboard() {
+  reconciliationScheduler.stop();
   if (redis) {
     try {
       await redis.quit();
@@ -31,4 +44,10 @@ async function closeLeaderboard() {
   }
 }
 
-module.exports = { leaderboardService, redisClient: redis, closeLeaderboard };
+module.exports = {
+  leaderboardService,
+  redisClient: redis,
+  reconciliationScheduler,
+  startLeaderboardJobs,
+  closeLeaderboard,
+};

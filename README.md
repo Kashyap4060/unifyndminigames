@@ -255,7 +255,12 @@ src/redis/client.js                      Resilient ioredis client (fail-fast →
 - **Durability/repair**: the per-settlement increment is best-effort, so `leaderboard_scores`
   could drift if an increment is lost. `reconcileFromLedger(period)` repairs it from the money
   source of truth — summing `points_ledger` `GAME_PAYOUT` credits per user over the period's UTC
-  window — then refreshes Redis. Run it on a schedule and/or after an outage.
+  window — then refreshes Redis.
+- **Automatic reconciliation**: `server.js` starts an in-process UTC cron (`node-cron`) that runs
+  `reconcileFromLedger` on a schedule — daily/weekly hourly, global nightly by default — so drift
+  self-repairs with no manual step. Each job has an overlap guard and isolates errors. Configure
+  or disable via `LEADERBOARD_RECONCILE_*` env vars (an empty expression disables that period);
+  jobs start only in `server.js`, never during tests/app-assembly.
 
 ### `GET /api/leaderboard`
 

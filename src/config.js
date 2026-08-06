@@ -68,6 +68,16 @@ const config = Object.freeze({
     // Secret for deriving opaque public player aliases (never exposed to clients).
     // Falls back to JWT_SECRET when not set separately.
     aliasSecret: process.env.LEADERBOARD_ALIAS_SECRET || required('JWT_SECRET'),
+    // Periodic reconciliation from points_ledger (repairs any leaderboard drift).
+    // Cron runs in UTC. An empty expression disables that period's job.
+    reconcile: Object.freeze({
+      enabled: boolWithDefault('LEADERBOARD_RECONCILE_ENABLED', true),
+      schedules: Object.freeze({
+        daily: process.env.LEADERBOARD_RECONCILE_DAILY_CRON ?? '15 * * * *', // hourly at :15
+        weekly: process.env.LEADERBOARD_RECONCILE_WEEKLY_CRON ?? '30 * * * *', // hourly at :30
+        global: process.env.LEADERBOARD_RECONCILE_GLOBAL_CRON ?? '0 3 * * *', // nightly 03:00 UTC
+      }),
+    }),
   }),
 });
 
