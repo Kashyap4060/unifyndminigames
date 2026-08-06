@@ -609,12 +609,23 @@
             }
             try {
               const res = await fetch(`${cfg.apiBase}/health`, { method: 'GET' });
-              if (res.ok) {
-                modeRef.current = 'live';
-                if (alive) setMode('live');
-                log('info', 'backend /health OK → LIVE mode');
-                log('info', 'note: no balance endpoint yet — reconciling from API responses');
-              } else throw new Error(`health ${res.status}`);
+              if (!res.ok) throw new Error(`health ${res.status}`);
+              modeRef.current = 'live';
+              if (alive) setMode('live');
+              log('info', 'backend /health OK → LIVE mode');
+              // Fetch the authoritative balance for the badge/panel at launch.
+              try {
+                const wr = await fetch(`${cfg.apiBase}/api/wallet`, {
+                  headers: { Authorization: `Bearer ${cfg.token}` },
+                });
+                const wj = await wr.json();
+                if (wr.ok && wj && wj.success && alive) {
+                  setBalance(Number(wj.data.balance));
+                  log('res', `← GET /api/wallet {balance:${wj.data.balance}}`);
+                }
+              } catch (_w) {
+                log('info', 'wallet fetch failed — using seeded balance until first round');
+              }
             } catch (e) {
               modeRef.current = 'sim';
               if (alive) setMode('sim');

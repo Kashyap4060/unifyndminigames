@@ -9,6 +9,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "demo": "node --env-file=.env src/server.js",
+    "db:load": "node --env-file=.env scripts/db.js db/schema.sql",
+    "db:seed": "node --env-file=.env scripts/db.js db/seed.demo.sql",
+    "mint-token": "node --env-file=.env scripts/mint-token.js",
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {

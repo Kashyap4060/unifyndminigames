@@ -108,9 +108,9 @@ DROP TRIGGER IF EXISTS trg_points_ledger_no_update;
 DROP TRIGGER IF EXISTS trg_points_ledger_no_delete;
 DELIMITER //
 CREATE TRIGGER trg_points_ledger_no_update BEFORE UPDATE ON points_ledger
-FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'points_ledger is append-only';
+FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'points_ledger is append-only'//
 CREATE TRIGGER trg_points_ledger_no_delete BEFORE DELETE ON points_ledger
-FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'points_ledger is append-only';
+FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'points_ledger is append-only'//
 DELIMITER ;
 
 -- -----------------------------------------------------------------------------
